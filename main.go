@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+
+	"github.com/sinnlos-ffff/redis_clone/pkg/event_loop"
 )
 
 func main() {
@@ -14,26 +16,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	con, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
+	eventLoop := event_loop.NewEventLoop(10)
 
-	defer con.Close()
-
-	for {
-		input := make([]byte, 1024)
-		_, err := con.Read(input)
-		if err != nil {
-			fmt.Println("Error reading on connection: ", err.Error())
-			os.Exit(1)
-		}
-
-		con.Write([]byte("+PONG\r\n"))
+	eventLoop.RegisterHandler("ping", func(event event_loop.Event) {
+		_, err := event.Conn.Write([]byte("+PONG\r\n"))
 		if err != nil {
 			fmt.Println("Error writing on connection: ", err.Error())
 			os.Exit(1)
 		}
+	})
+
+	eventLoop.Start()
+
+	for {
+		con, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+
+		defer con.Close()
+
+		input := make([]byte, 128)
+		_, err = con.Read(input)
+
+		if err != nil {
+			fmt.Println("Error reading on connection: ", err.Error())
+			continue
+		}
+
+		eventLoop.PostEvent(event_loop.Event{Name: "ping", Conn: con})
 	}
 }
